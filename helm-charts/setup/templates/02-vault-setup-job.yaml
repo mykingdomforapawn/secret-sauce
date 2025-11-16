@@ -1,0 +1,80 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # The name of the job
+  name: vault-setup-job
+  # Deploys this job into the 'vault' namespace
+  # so it can easily find the vault service
+  namespace: vault
+spec:
+  # This makes the Job clean itself up after it finishes
+  ttlSecondsAfterFinished: 100
+
+  template:
+    spec:
+      # This job must be allowed to talk to Vault.
+      # We give it the 'default' service account, which
+      # our Vault Role trusts.
+      serviceAccountName: default
+
+      # Do not restart this pod if it fails;
+      # we just want to see the error.
+      restartPolicy: Never
+
+      containers:
+        - name: vault-cli
+          # Use an official HashiCorp image that
+          # contains the 'vault' CLI.
+          image: hashicorp/vault:1.16.1
+
+          # This is the script that runs, replacing
+          # all your manual 'exec' steps.
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # 1. Set environment variables
+              export VAULT_TOKEN="root"
+              export VAULT_ADDR="http://vault:8200"
+              unset VAULT_NAMESPACE
+
+              echo "--- Waiting for Vault to be ready at ${VAULT_ADDR}..."
+
+              # 2. Wait loop
+              until vault status; do
+                echo "Waiting for vault... (vault is sealed or not responding)"
+                sleep 5
+              done
+
+              echo "--- Vault is ready."
+
+              # 3. Enable K8s Auth (Idempotent)
+              vault auth enable kubernetes || echo "Auth 'kubernetes' already enabled."
+
+              # 4. Configure K8s Auth
+              vault write auth/kubernetes/config \
+                kubernetes_host="https://kubernetes.default.svc" \
+                kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+                token_reviewer_jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token
+
+              # 5. Create the secret
+              vault kv put secret/my-app/config \
+                username="demo-user-from-vault" \
+                message="It worked" \
+                theme="blue"
+
+              # 6. Create the policy
+              vault policy write secret-reader-policy - <<EOF
+              path "secret/data/my-app/config" {
+                capabilities = ["read"]
+              }
+              EOF
+
+              # 7. Create the role
+              vault write auth/kubernetes/role/secret-reader \
+                bound_service_account_names=default \
+                bound_service_account_namespaces=default \
+                policies="secret-reader-policy" \
+                ttl=24h
+
+              echo "--- Vault setup complete."

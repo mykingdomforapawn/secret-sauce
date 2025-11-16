@@ -7,6 +7,9 @@ repositories:
   # Repository for the Traefik Ingress controller.
   - name: traefik
     url: https://helm.traefik.io/traefik
+  # Repository for the External Secrets Operator.
+  - name: external-secrets
+    url: https://charts.external-secrets.io
 
 # Defines the list of Helm releases to deploy.
 releases:
@@ -41,3 +44,33 @@ releases:
     # Points to the external values file.
     values:
       - ./helm-values/traefik.yaml
+
+  # -----------------------------------------------------------------
+  # Release: External Secrets Operator
+  # Purpose: The "bridge" that syncs secrets from Vault to K8s.
+  # -----------------------------------------------------------------
+  - name: external-secrets
+    # Deploys into the 'external-secrets' namespace.
+    namespace: external-secrets
+    createNamespace: true
+    chart: external-secrets/external-secrets
+    # Pins the chart version.
+    version: 0.9.13
+    # Points to the external values file.
+    values:
+      - ./helm-values/external-secrets.yaml
+
+  # -----------------------------------------------------------------
+  # Release: Local Setup Chart
+  # Purpose: Deploys our custom manifests and config job.
+  # -----------------------------------------------------------------
+  - name: secret-sauce-setup
+    # Deploys into the 'default' namespace
+    namespace: default
+    # This chart is a local file path
+    chart: ./helm-charts/setup
+    # CRITICAL: This ensures the setup job only runs
+    # AFTER Vault and ESO are ready.
+    needs:
+      - "vault/vault"
+      - "external-secrets/external-secrets"
