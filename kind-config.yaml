@@ -1,0 +1,26 @@
+---
+# Defines the configuration for the 'kind' (Kubernetes in Docker) cluster.
+kind: Cluster
+# Specifies the Kind API version for this configuration.
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  # Configures the cluster's main control-plane node.
+  - role: control-plane
+    # Patches the underlying kubeadm configuration for the node.
+    # This is done to add a label that the Ingress controller will use.
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    # Forwards local machine (host) ports to the cluster's internal node.
+    extraPortMappings:
+      # Exposes the Ingress controller's HTTP port on http://localhost:8081.
+      - containerPort: 80
+        hostPort: 8081
+        protocol: TCP
+      # Exposes the Ingress controller's HTTPS port on https://localhost:8443.
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
