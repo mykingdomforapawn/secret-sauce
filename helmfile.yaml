@@ -1,0 +1,43 @@
+---
+# Defines the Helm repositories needed for the charts.
+repositories:
+  # Repository for HashiCorp charts (Vault, etc.)
+  - name: hashicorp
+    url: https://helm.releases.hashicorp.com
+  # Repository for the Traefik Ingress controller.
+  - name: traefik
+    url: https://helm.traefik.io/traefik
+
+# Defines the list of Helm releases to deploy.
+releases:
+  # -----------------------------------------------------------------
+  # Release: HashiCorp Vault
+  # Purpose: The central secrets manager.
+  # -----------------------------------------------------------------
+  - name: vault
+    # Deploys into the 'vault' namespace.
+    namespace: vault
+    # Creates the namespace if it doesn't exist.
+    createNamespace: true
+    # Defines the chart to use.
+    chart: hashicorp/vault
+    # Pins the chart version for stable, repeatable deployments.
+    version: 0.28.0
+    # Points to the external values file.
+    values:
+      - ./helm-values/vault.yaml
+
+  # -----------------------------------------------------------------
+  # Release: Traefik
+  # Purpose: Exposes HTTP/HTTPS services to the host machine.
+  # -----------------------------------------------------------------
+  - name: traefik
+    # Deploys into the 'traefik' namespace.
+    namespace: traefik
+    createNamespace: true
+    chart: traefik/traefik
+    # Pins the chart version.
+    version: 26.1.0
+    # Points to the external values file.
+    values:
+      - ./helm-values/traefik.yaml

@@ -1,0 +1,45 @@
+---
+# --- Deployment Settings ---
+# Deploys the controller as a DaemonSet.
+# This ensures it runs on the node(s) matching the nodeSelector.
+deployment:
+  kind: DaemonSet
+
+# Schedules the controller only on nodes with this label.
+# This label is set in the kind-config.yaml.
+nodeSelector:
+  "ingress-ready": "true"
+
+# --- Port Settings ---
+ports:
+  # Defines the main HTTP entrypoint.
+  web:
+    # Binds to container port 80.
+    port: 80
+    # Exposes this port directly on the host.
+    # This is required for the 'extraPortMappings' in kind-config.yaml to work.
+    hostPort: 80
+    # Sets the container port name.
+    containerPort: 80
+
+  # Defines the main HTTPS entrypoint.
+  websecure:
+    # Binds to container port 443.
+    port: 443
+    # Exposes this port directly on the host.
+    hostPort: 443
+    # Sets the container port name.
+    containerPort: 443
+
+# --- Service Settings ---
+# Disables the default 'LoadBalancer' service, which won't work in Kind.
+service:
+  enabled: false
+
+# --- Webhook Settings ---
+# HACK: Disables admission webhooks.
+# These can cause setup failures in local 'kind' environments.
+providers:
+  kubernetesCRD:
+    allowCrossNamespace: true
+  kubernetesIngress: {}

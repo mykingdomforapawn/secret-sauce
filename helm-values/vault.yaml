@@ -1,0 +1,19 @@
+---
+# --- Server Settings ---
+server:
+  # HACK: Enables Vault's 'dev' mode.
+  # This is insecure, starts Vault unsealed, and uses a known 'root' token.
+  # It is strictly for local development and demo purposes.
+  dev:
+    enabled: true
+
+  # Disables the high-availability (HA) mode, as it's not needed
+  # for a single-node local cluster.
+  ha:
+    enabled: false
+
+# --- UI Settings ---
+# Disables the Vault UI to keep the deployment minimal.
+# This can be set to 'true' later if UI access is desired.
+ui:
+  enabled: false
