@@ -1,0 +1,14 @@
+---
+image:
+  repository: secret-reader
+  tag: v1
+  pullPolicy: IfNotPresent
+
+# The name of the native K8s secret we want ESO to create
+secret:
+  name: my-app-secret
+  vaultPath: my-app/config
+
+ingress:
+  enabled: true
+  host: localhost

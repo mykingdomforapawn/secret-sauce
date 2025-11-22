@@ -65,12 +65,35 @@ releases:
   # Purpose: Deploys our custom manifests and config job.
   # -----------------------------------------------------------------
   - name: secret-sauce-setup
-    # Deploys into the 'default' namespace
+    # Deploys into the 'default' namespace.
     namespace: default
-    # This chart is a local file path
+    # This chart is a local file path.
     chart: ./helm-charts/setup
-    # CRITICAL: This ensures the setup job only runs
-    # AFTER Vault and ESO are ready.
+    # This ensures the setup job only runs after Vault and ESO are ready.
     needs:
       - "vault/vault"
       - "external-secrets/external-secrets"
+
+    # Smart timer to ensure dependencies are ready.
+    hooks:
+      # Run this command before installing this chart.
+      - events: ["presync"]
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "wait"
+          - "--namespace=external-secrets"
+          - "--for=condition=Available"
+          - "deployment/external-secrets-webhook"
+          - "--timeout=60s"
+
+  # -----------------------------------------------------------------
+  # Release: Secret Reader App
+  # -----------------------------------------------------------------
+  - name: secret-reader
+    namespace: default
+    # Point to your local folder
+    chart: ./helm-charts/secret-reader
+    # No "values:" section needed here!
+    needs:
+      - "default/secret-sauce-setup"

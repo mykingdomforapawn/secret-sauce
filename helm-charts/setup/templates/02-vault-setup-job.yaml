@@ -16,7 +16,7 @@ spec:
       # This job must be allowed to talk to Vault.
       # We give it the 'default' service account, which
       # our Vault Role trusts.
-      serviceAccountName: default
+      serviceAccountName: vault
 
       # Do not restart this pod if it fails;
       # we just want to see the error.
@@ -72,9 +72,9 @@ spec:
 
               # 7. Create the role
               vault write auth/kubernetes/role/secret-reader \
-                bound_service_account_names=default \
-                bound_service_account_namespaces=default \
-                policies="secret-reader-policy" \
-                ttl=24h
+              bound_service_account_names=default,external-secrets \
+              bound_service_account_namespaces=default,external-secrets \
+              policies=secret-reader-policy \
+              ttl=24h
 
               echo "--- Vault setup complete."

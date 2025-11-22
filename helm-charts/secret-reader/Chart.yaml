@@ -1,0 +1,7 @@
+---
+apiVersion: v2
+name: secret-reader
+description: Demo app for Vault integration patterns.
+type: application
+version: 0.1.0
+appVersion: 0.1.0
