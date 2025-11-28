@@ -70,7 +70,7 @@ def show_secrets():
         </div>
 
         <div class="card" style="border-left: 5px solid #00cc66">
-            <h2>Pattern 3: Dynamic Secrets 🚀</h2>
+            <h2>Pattern 3: Dynamic Secrets</h2>
             <p>Database Connection String:</p>
             <p class="value">{db_config}</p>
             <div class="source">Source: /vault/secrets/database-config</div>

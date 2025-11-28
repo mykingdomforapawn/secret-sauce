@@ -2,7 +2,7 @@
 
 An exploration of standard patterns for managing secrets in Kubernetes, using Vault and the External Secrets Operator.
 
-> **AI Disclaimer:** This project was developed with the assistance of Google's Gemini to guide the learning process, explain concepts, and generate configuration.
+> **AI Disclaimer:** This project was developed with the assistance of AI tools to guide the learning process, explain concepts, and generate configuration.
 
 ---
 
@@ -10,12 +10,13 @@ An exploration of standard patterns for managing secrets in Kubernetes, using Va
 
 This project is a practical, hands-on sandbox for understanding modern secrets management in Kubernetes.
 
-The goal is to build a complete, automated setup on a local cluster to explore the two primary patterns for securely delivering secrets to applications:
+The goal is to build a complete, automated setup on a local cluster to explore three primary patterns for securely delivering secrets to applications:
 
 1.  **The Operator Pattern:** An operator (ESO) syncs Vault secrets *to* native Kubernetes `Secret` objects.
 2.  **The Agent-Injector Pattern:** A sidecar injects secrets directly into the application pod *without* creating a K8s `Secret`.
+3.  **The Dynamic Secrets Pattern:** Vault generates temporary, unique database credentials on-demand for each application instance.
 
-This repository serves as a reproducible base to build, test, and understand these two critical workflows.
+This repository serves as a reproducible base to build, test, and understand these critical workflows.
 
 ---
 
@@ -28,7 +29,7 @@ This project uses the following open-source tools:
 * **Secrets Manager**: **`HashiCorp Vault`** deployed in dev-mode as the central "source of truth" for all secrets.
 * **Networking**: **`Traefik`** as a modern Ingress controller to expose the demo application.
 * **Pattern 1 (Operator)**: **`External Secrets Operator (ESO)`** as the "bridge" component that synchronizes secrets from Vault to Kubernetes.
-* **Pattern 2 (Injector)**: **`Vault Agent Injector`** (deployed with the Vault chart) to enable the sidecar injection pattern.
+* **Pattern 2 & 3 (Injector)**: **`Vault Agent Injector`** (deployed with the Vault chart) to enable the sidecar injection pattern.
 * **Automation**: A local **Helm Chart** (`/charts/setup`) containing a **Kubernetes Job** to automatically configure Vault (auth, roles, policies, and demo secrets) on every cluster start.
 * **Repo Quality**: **`pre-commit`** hooks using **`yamllint`** and **`gitleaks`** for code quality and secret scanning.
 
@@ -36,11 +37,11 @@ This project uses the following open-source tools:
 
 ## Architecture
 
-This project explores two distinct secrets-delivery architectures.
+This project explores three distinct secrets-delivery architectures.
 
 ### Pattern 1: The Operator Model (External Secrets)
 
-This is the primary focus of the setup so far. A central operator polls Vault and translates secrets into native K8s objects.
+A central operator polls Vault and translates secrets into native K8s objects.
 
 ```text
   [ Vault ]
@@ -65,7 +66,7 @@ This is the primary focus of the setup so far. A central operator polls Vault an
 
 ### Pattern 2: The Agent-Injector Model (Sidecar)
 
-This pattern (the next step) bypasses Kubernetes `Secret` objects entirely.
+This pattern bypasses Kubernetes `Secret` objects entirely.
 
 ```text
     [ Vault ]
@@ -83,6 +84,36 @@ This pattern (the next step) bypasses Kubernetes `Secret` objects entirely.
       v
   [ App Pod ]
 ```
+
+### Pattern 3: Dynamic Secrets
+
+This pattern extends the Injector model. Instead of reading a static string, Vault generates a new database user for the app.
+
+```text
+    [ Vault ] <----(2. Create User)----> [ Database ]
+      ^   |
+      |   | (3. Return new creds)
+      |   v
+[ Vault Agent Sidecar ]
+      |
+      v
+ [ /vault/secrets/... ]
+      |
+      v
+  [ App Pod ]
+```
+
+---
+
+## Pattern Comparison
+
+| Feature         | Operator (Pattern 1)                                                    | Injector (Pattern 2 & 3)                                                         |
+|:----------------|:------------------------------------------------------------------------|:---------------------------------------------------------------------------------|
+| **Best For...** | **Legacy / Simple Apps.** Apps that expect Environment Variables.       | **High Security / Dynamic Apps.** Apps that can read files and handle rotation.  |
+| **Security**    | **Medium.** Secrets stored in `etcd`. Visible via `kubectl get secret`. | **High.** Secrets exist *only* in the Pod's memory (RAM).                        |
+| **Updates**     | **Static.** Requires Pod restart to pick up changes.                    | **Dynamic.** Sidecar updates the file instantly; app can reload without restart. |
+| **Complexity**  | **Low.** Standard K8s usage.                                            | **High.** Requires sidecars and file-based config handling.                      |
+| **Scale**       | **Efficient.** One operator manages thousands of secrets.               | **Heavy.** Every pod gets a sidecar container.                                   |
 
 ---
 
@@ -133,18 +164,26 @@ pre-commit install
 
 This single command does everything:
 1.  Creates the `kind` cluster (using `kind-config.yaml`).
-2.  Deploys Vault, Traefik, and ESO via `helmfile`.
-3.  Deploys the local `setup` chart.
-4.  The `vault-setup-job` runs and automatically figures all Vault auth, roles, policies, and demo secrets.
+2.  Builds and loads the app image.
+3.  Deploys Vault, Traefik, and ESO via `helmfile`.
+4.  Deploys the local `setup` chart which configures Vault via a Job.
+5.  Deploys the `secret-reader` app.
 
 ```bash
-# This is the only command you need
+# 1. Create the cluster
+kind create cluster --name secret-sauce --config kind-config.yaml
+
+# 2. Build and load the image
+docker build -t secret-reader:v1 ./services/secret-reader
+kind load docker-image secret-reader:v1 --name secret-sauce
+
+# 3. Deploy
 helmfile sync
 ```
 
 ### 5. Verify the Setup
 
-Wait 1-2 minutes for the setup job to complete, then check:
+Wait 1-2 minutes for the setup job to complete and the pods to start.
 
 ```bash
 # Check that the setup job completed
@@ -154,7 +193,23 @@ kubectl get pods -n vault -l job-name=vault-setup-job
 kubectl get clustersecretstore vault-backend
 ```
 
-Both should show `Completed` and `Ready`, respectively.
+**View the Demo:**
+Open **[http://localhost:8081](http://localhost:8081)** in your browser. You should see all three patterns populated with secrets.
+
+---
+
+## Production Readiness Checklist
+
+This project uses several shortcuts for ease of demonstration. **Do not use this configuration in production.**
+
+| Area               | The Shortcut (Demo)                                             | The Production Standard                                                |
+|:-------------------|:----------------------------------------------------------------|:-----------------------------------------------------------------------|
+| **Vault Mode**     | **Dev Mode:** Unsealed, in-memory storage, single node.         | **HA Mode:** 3+ nodes, Raft storage, Auto-Unseal (AWS/GCP KMS).        |
+| **Authentication** | **Root Token:** Used `VAULT_TOKEN=root` in scripts.             | **Least Privilege:** Never use root. Use Terraform to configure Vault. |
+| **Configuration**  | **Shell Scripts:** Used `vault write` commands in a Job.        | **Infrastructure as Code:** Use the **Terraform Vault Provider**.      |
+| **Secret Zero**    | **Hardcoded:** Postgres password plain text in `helmfile.yaml`. | **Existing Secrets:** Create K8s secrets out-of-band (e.g., SOPS).     |
+| **Traffic**        | **HTTP:** Plain text traffic within the cluster.                | **mTLS:** Enable TLS on Vault and use Cert-Manager for Ingress.        |
+| **Database**       | **Ephemeral:** Data lost on restart.                            | **Persistent:** Use PVCs or a managed cloud database (RDS/CloudSQL).   |
 
 ---
 
@@ -171,32 +226,28 @@ You can destroy the entire setup with two commands:
     kind delete cluster --name secret-sauce
     ```
 
-**To rebuild:** Just run `helmfile sync` again.
+**To rebuild:** Run the commands in Step 4 ("Deploy the Full Stack") again.
 
 ---
 
 ## Project Roadmap
 
 * [x] **Step 1: Cluster Setup**
-    * Configured a reproducible `kind` cluster (`kind-config.yaml`).
+  * Configured a reproducible `kind` cluster (`kind-config.yaml`).
 * [x] **Step 2: Repo Quality**
-    * Added `pre-commit` hooks for `yamllint` and `gitleaks`.
+  * Added `pre-commit` hooks for `yamllint` and `gitleaks`.
 * [x] **Step 3: Deploy Core Backends**
-    * Used `helmfile` to deploy all components.
-    * `HashiCorp Vault` (dev-mode)
-    * `Traefik` (Ingress)
-    * `External Secrets Operator (ESO)`
+  * Used `helmfile` to deploy Vault, Traefik, and ESO.
 * [x] **Step 4: Automate Vault Setup**
-    * Created local `setup` Helm chart.
-    * Created a `Job` (`vault-setup-job`) to run all config on start.
-    * Job enables K8s auth, creates policies, roles, and a demo secret (`secret/my-app/config`).
-    * Chart deploys the `ClusterSecretStore` to link ESO to Vault.
-* [ ] **Step 5: Phase 1 - Operator Model**
-    * [ ] Build "secret-reader" demo app.
-    * [ ] Create a local Helm chart for the app.
-    * [ ] Create `ExternalSecret` manifest to request `secret/my-app/config`.
-    * [ ] Deploy app and verify it reads the K8s `Secret` (via env vars).
-* [ ] **Step 6: Phase 2 - Injector Model**
-    * [ ] Re-configure app chart to use Vault agent annotations.
-    * [ ] Remove the `ExternalSecret` manifest.
-    * [ ] Deploy app and verify it reads the secret directly from `/vault/secrets`.
+  * Created local `setup` Helm chart.
+  * Created a `Job` (`vault-setup-job`) to autoconfigure Vault auth, roles, and policies.
+  * Configured the Database Secrets Engine for dynamic credentials.
+* [x] **Step 5: Pattern 1 - Operator Model**
+  * Created `ExternalSecret` manifest to request `secret/my-app/config`.
+  * Verified app reads the K8s `Secret` via env vars.
+* [x] **Step 6: Pattern 2 - Injector Model**
+  * Configured app deployment with Vault Agent annotations.
+  * Verified app reads secrets from `/vault/secrets`.
+* [x] **Step 7: Pattern 3 - Dynamic Secrets**
+  * Configured Vault to generate on-demand Postgres credentials.
+  * Verified app receives unique, short-lived database credentials.
