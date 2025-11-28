@@ -1,14 +1,23 @@
 ---
+# Configures the application image.
 image:
+  # Sets the image repository name.
   repository: secret-reader
+  # Sets the image tag version.
   tag: v1
+  # Sets the pull policy to use the local image if present.
   pullPolicy: IfNotPresent
 
-# The name of the native K8s secret we want ESO to create
+# Configures the secret synchronization settings.
 secret:
+  # Sets the name of the Kubernetes Secret to be created by ESO.
   name: my-app-secret
+  # Specifies the path to the secret in Vault.
   vaultPath: my-app/config
 
+# Configures the Ingress resource.
 ingress:
+  # Enables the creation of an Ingress resource.
   enabled: true
+  # Sets the hostname for the Ingress rule.
   host: localhost

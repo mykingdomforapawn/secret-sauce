@@ -1,17 +1,22 @@
 ---
+# Specifies the API version for Ingress resources.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
+  # Sets the name of the Ingress resource using the chart name.
   name: {{ .Chart.Name }}
 spec:
   rules:
+    # Defines the hostname for the Ingress rule.
     - host: {{ .Values.ingress.host }}
       http:
         paths:
+          # Configures the path routing logic.
           - path: /
             pathType: Prefix
             backend:
               service:
+                # Points traffic to the backend service.
                 name: {{ .Chart.Name }}
                 port:
                   number: 80

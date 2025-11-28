@@ -1,45 +1,48 @@
 ---
 # --- Deployment Settings ---
-# Deploys the controller as a DaemonSet.
-# This ensures it runs on the node(s) matching the nodeSelector.
+# Configures the deployment type for the Traefik controller.
 deployment:
+  # Sets the deployment kind to DaemonSet.
   kind: DaemonSet
 
-# Schedules the controller only on nodes with this label.
-# This label is set in the kind-config.yaml.
+# --- Node Scheduling ---
+# Ensures Traefik runs only on nodes designated for ingress.
 nodeSelector:
   "ingress-ready": "true"
 
-# --- Port Settings ---
+# --- Port Configuration ---
+# Configures the listening ports for the Traefik controller.
 ports:
-  # Defines the main HTTP entrypoint.
+  # Configures the HTTP entrypoint.
   web:
-    # Binds to container port 80.
+    # Binds the container port to 80.
     port: 80
-    # Exposes this port directly on the host.
-    # This is required for the 'extraPortMappings' in kind-config.yaml to work.
+    # Exposes port 80 directly on the host machine.
     hostPort: 80
     # Sets the container port name.
     containerPort: 80
 
-  # Defines the main HTTPS entrypoint.
+  # Configures the HTTPS entrypoint.
   websecure:
-    # Binds to container port 443.
+    # Binds the container port to 443.
     port: 443
-    # Exposes this port directly on the host.
+    # Exposes port 443 directly on the host machine.
     hostPort: 443
     # Sets the container port name.
     containerPort: 443
 
 # --- Service Settings ---
-# Disables the default 'LoadBalancer' service, which won't work in Kind.
+# Configures the Kubernetes Service for Traefik.
 service:
+  # Disables the LoadBalancer service as host ports are used.
   enabled: false
 
-# --- Webhook Settings ---
-# HACK: Disables admission webhooks.
-# These can cause setup failures in local 'kind' environments.
+# --- Provider Settings ---
+# Configures the Kubernetes provider integration.
 providers:
+  # Configures settings for Kubernetes CRDs.
   kubernetesCRD:
+    # Allows IngressRoutes to reference resources in other namespaces.
     allowCrossNamespace: true
+  # Enables the standard Kubernetes Ingress provider.
   kubernetesIngress: {}

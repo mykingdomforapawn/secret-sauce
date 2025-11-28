@@ -2,26 +2,73 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  # Sets the name of the Deployment using the chart name.
   name: {{ .Chart.Name }}
 spec:
+  # Defines the number of desired pods.
   replicas: 1
   selector:
+    # Selects pods with the matching app label.
     matchLabels:
       app: {{ .Chart.Name }}
   template:
     metadata:
       labels:
+        # Applies the app label to the pod.
         app: {{ .Chart.Name }}
+
+      # --- Pattern 2 & 3: Vault Injector Annotations ---
+      # These annotations configure the Vault Agent sidecar injection.
+      annotations:
+        # Enables the Vault Agent Sidecar Injector.
+        vault.hashicorp.com/agent-inject: 'true'
+
+        # Specifies the Vault Role to use for authentication.
+        vault.hashicorp.com/role: 'secret-reader'
+
+        # --- Pattern 2: Static Secrets ---
+        # Configures the injection of the username secret.
+        vault.hashicorp.com/agent-inject-secret-username: 'secret/data/my-app/config'
+        # Defines the template to extract the username value.
+        vault.hashicorp.com/agent-inject-template-username: |
+          {{`{{- with secret "secret/data/my-app/config" -}}
+          {{ .Data.data.username }}
+          {{- end -}}`}}
+
+        # Configures the injection of the message secret.
+        vault.hashicorp.com/agent-inject-secret-message: 'secret/data/my-app/config'
+        # Defines the template to extract the message value.
+        vault.hashicorp.com/agent-inject-template-message: |
+          {{`{{- with secret "secret/data/my-app/config" -}}
+          {{ .Data.data.message }}
+          {{- end -}}`}}
+
+        # --- Pattern 3: Dynamic Database Secret ---
+        # Configures the injection of dynamic database credentials.
+        vault.hashicorp.com/agent-inject-secret-database-config: 'database/creds/db-reader'
+
+        # Defines the template to format the connection string.
+        vault.hashicorp.com/agent-inject-template-database-config: |
+          {{`{{- with secret "database/creds/db-reader" -}}
+          postgresql://{{ .Data.username }}:{{ .Data.password }}@postgres-postgresql.default.svc.cluster.local:5432/postgres
+          {{- end -}}`}}
+
     spec:
+      # Specifies the ServiceAccount authorized in the Vault Role.
+      serviceAccountName: default
+
       containers:
         - name: main
+          # Defines the container image and tag.
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          # Sets the image pull policy.
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
+            # Exposes the container port.
             - containerPort: 5000
 
-          # --- Phase 1 Integration ---
-          # Load all keys from the generated Secret as Env Vars
+          # --- Pattern 1: Kubernetes Secret (Env Vars) ---
+          # Loads environment variables from the native Kubernetes Secret.
           envFrom:
             - secretRef:
                 name: {{ .Values.secret.name }}

@@ -1,7 +1,8 @@
 ---
-# Defines the Helm repositories needed for the charts.
+# --- Helm Repositories ---
+# Defines the remote chart repositories used by Helmfile.
 repositories:
-  # Repository for HashiCorp charts (Vault, etc.)
+  # Repository for HashiCorp charts (Vault, etc.).
   - name: hashicorp
     url: https://helm.releases.hashicorp.com
   # Repository for the Traefik Ingress controller.
@@ -11,72 +12,66 @@ repositories:
   - name: external-secrets
     url: https://charts.external-secrets.io
 
-# Defines the list of Helm releases to deploy.
+# --- Helm Releases ---
+# Defines the list of software to deploy into the cluster.
 releases:
-  # -----------------------------------------------------------------
-  # Release: HashiCorp Vault
-  # Purpose: The central secrets manager.
-  # -----------------------------------------------------------------
+  # --- Release: HashiCorp Vault ---
   - name: vault
     # Deploys into the 'vault' namespace.
     namespace: vault
-    # Creates the namespace if it doesn't exist.
+    # Creates the namespace if it does not exist.
     createNamespace: true
-    # Defines the chart to use.
+    # Specifies the chart to use from the 'hashicorp' repo.
     chart: hashicorp/vault
-    # Pins the chart version for stable, repeatable deployments.
+    # Pins the chart version for reproducible builds.
     version: 0.28.0
-    # Points to the external values file.
+    # Loads configuration overrides from a local values file.
     values:
       - ./helm-values/vault.yaml
 
-  # -----------------------------------------------------------------
-  # Release: Traefik
-  # Purpose: Exposes HTTP/HTTPS services to the host machine.
-  # -----------------------------------------------------------------
+  # --- Release: Traefik (Ingress) ---
   - name: traefik
     # Deploys into the 'traefik' namespace.
     namespace: traefik
+    # Creates the namespace if it does not exist.
     createNamespace: true
+    # Specifies the chart to use from the 'traefik' repo.
     chart: traefik/traefik
     # Pins the chart version.
     version: 26.1.0
-    # Points to the external values file.
+    # Loads configuration overrides from a local values file.
     values:
       - ./helm-values/traefik.yaml
 
-  # -----------------------------------------------------------------
-  # Release: External Secrets Operator
-  # Purpose: The "bridge" that syncs secrets from Vault to K8s.
-  # -----------------------------------------------------------------
+  # --- Release: External Secrets Operator ---
   - name: external-secrets
     # Deploys into the 'external-secrets' namespace.
     namespace: external-secrets
+    # Creates the namespace if it does not exist.
     createNamespace: true
+    # Specifies the chart to use from the 'external-secrets' repo.
     chart: external-secrets/external-secrets
     # Pins the chart version.
     version: 0.9.13
-    # Points to the external values file.
+    # Loads configuration overrides from a local values file.
     values:
       - ./helm-values/external-secrets.yaml
 
-  # -----------------------------------------------------------------
-  # Release: Local Setup Chart
-  # Purpose: Deploys our custom manifests and config job.
-  # -----------------------------------------------------------------
+  # --- Release: Local Setup Chart ---
+  # Deploys project-specific manifests (ClusterSecretStore) and the setup Job.
   - name: secret-sauce-setup
     # Deploys into the 'default' namespace.
     namespace: default
-    # This chart is a local file path.
+    # Points to the local chart path in the repository.
     chart: ./helm-charts/setup
-    # This ensures the setup job only runs after Vault and ESO are ready.
+    # Ensures this chart installs only after Vault and ESO are ready.
     needs:
       - "vault/vault"
       - "external-secrets/external-secrets"
 
-    # Smart timer to ensure dependencies are ready.
+    # Defines a hook to pause execution until dependencies are available.
     hooks:
-      # Run this command before installing this chart.
+      # Runs this command before the 'sync' operation for this release.
       - events: ["presync"]
         showlogs: true
         command: "kubectl"
@@ -87,13 +82,34 @@ releases:
           - "deployment/external-secrets-webhook"
           - "--timeout=60s"
 
-  # -----------------------------------------------------------------
-  # Release: Secret Reader App
-  # -----------------------------------------------------------------
+  # --- Release: Secret Reader App ---
+  # Deploys the demo application that consumes the secrets.
   - name: secret-reader
+    # Deploys into the 'default' namespace.
     namespace: default
-    # Point to your local folder
+    # Points to the local chart path in the repository.
     chart: ./helm-charts/secret-reader
-    # No "values:" section needed here!
+    # Ensures the setup Job has configured Vault before the app starts.
     needs:
       - "default/secret-sauce-setup"
+
+  # --- Release: PostgreSQL ---
+  # Deploys the database used for the Dynamic Secrets demo.
+  - name: postgres
+    # Deploys into the 'default' namespace.
+    namespace: default
+    # Uses the Bitnami PostgreSQL chart from the OCI registry.
+    chart: oci://registry-1.docker.io/bitnamicharts/postgresql
+    # Pins the chart version to a release with a valid image tag.
+    version: 18.1.12
+    values:
+      - auth:
+          # HACK: Hardcoded password for local development simplicity.
+          # Production should use an existing secret via 'auth.existingSecret'.
+          postgresPassword: "rootpassword"
+          username: "postgres"
+      - primary:
+          persistence:
+            # HACK: Disables persistence. Data is lost on pod restart.
+            # Production requires a PersistentVolumeClaim (PVC).
+            enabled: false

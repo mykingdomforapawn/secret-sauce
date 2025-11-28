@@ -1,13 +1,19 @@
 ---
+# Specifies the API version for RBAC resources.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  # Sets the name of the ClusterRoleBinding.
   name: vault-token-reviewer
 roleRef:
+  # Specifies the API group for the role.
   apiGroup: rbac.authorization.k8s.io
+  # Defines the type of role being referenced.
   kind: ClusterRole
+  # Uses the built-in system role for token review delegation.
   name: system:auth-delegator
 subjects:
+  # Grants the permission to the Vault ServiceAccount.
   - kind: ServiceAccount
     name: vault
     namespace: vault

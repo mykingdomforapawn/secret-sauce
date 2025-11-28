@@ -7,7 +7,7 @@ nodes:
   # Configures the cluster's main control-plane node.
   - role: control-plane
     # Patches the underlying kubeadm configuration for the node.
-    # This is done to add a label that the Ingress controller will use.
+    # This adds a specific label required by the Ingress controller.
     kubeadmConfigPatches:
       - |
         kind: InitConfiguration

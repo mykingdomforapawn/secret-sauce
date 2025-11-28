@@ -1,18 +1,20 @@
-# Use a lightweight Python image
+# Uses a minimal, official Python image to keep the build size small.
 FROM python:3.9-slim
 
-# Set working directory
+# Sets the working directory inside the container.
 WORKDIR /app
 
-# Install dependencies
+# Copies the dependency file first to leverage Docker's layer caching.
 COPY requirements.txt .
+
+# Installs the Python dependencies listed in the requirements file.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copies the main application source code into the container.
 COPY main.py .
 
-# Expose the port the app runs on
+# Documents that the container listens on port 5000.
 EXPOSE 5000
 
-# Run the application
+# Defines the default command to start the application.
 CMD ["python", "main.py"]

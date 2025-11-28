@@ -1,46 +1,41 @@
 ---
+# Specifies the API version for Job resources.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  # The name of the job
+  # Sets the name of the Job.
   name: vault-setup-job
-  # Deploys this job into the 'vault' namespace
-  # so it can easily find the vault service
+  # Deploys the job into the 'vault' namespace to access the Vault service easily.
   namespace: vault
 spec:
-  # This makes the Job clean itself up after it finishes
+  # Sets the time to live for the Job after completion to clean up resources.
   ttlSecondsAfterFinished: 100
 
   template:
     spec:
-      # This job must be allowed to talk to Vault.
-      # We give it the 'default' service account, which
-      # our Vault Role trusts.
+      # Assigns the ServiceAccount with permissions to configure Vault auth.
       serviceAccountName: vault
 
-      # Do not restart this pod if it fails;
-      # we just want to see the error.
+      # Ensures the pod does not restart on failure to aid debugging.
       restartPolicy: Never
 
       containers:
         - name: vault-cli
-          # Use an official HashiCorp image that
-          # contains the 'vault' CLI.
+          # Uses the official Vault image for the CLI tool.
           image: hashicorp/vault:1.16.1
 
-          # This is the script that runs, replacing
-          # all your manual 'exec' steps.
+          # Defines the setup script to run.
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # 1. Set environment variables
+              # 1. Sets environment variables for Vault CLI connection.
               export VAULT_TOKEN="root"
               export VAULT_ADDR="http://vault:8200"
               unset VAULT_NAMESPACE
 
               echo "--- Waiting for Vault to be ready at ${VAULT_ADDR}..."
 
-              # 2. Wait loop
+              # 2. Waits for Vault to be unsealed and ready.
               until vault status; do
                 echo "Waiting for vault... (vault is sealed or not responding)"
                 sleep 5
@@ -48,33 +43,61 @@ spec:
 
               echo "--- Vault is ready."
 
-              # 3. Enable K8s Auth (Idempotent)
+              # 3. Enables the Kubernetes authentication method (idempotent).
               vault auth enable kubernetes || echo "Auth 'kubernetes' already enabled."
 
-              # 4. Configure K8s Auth
+              # 4. Configures the Kubernetes authentication method.
               vault write auth/kubernetes/config \
                 kubernetes_host="https://kubernetes.default.svc" \
                 kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
                 token_reviewer_jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token
 
-              # 5. Create the secret
+              # 5. Creates the static secret for Pattern 1 & 2.
               vault kv put secret/my-app/config \
                 username="demo-user-from-vault" \
                 message="It worked" \
                 theme="blue"
 
-              # 6. Create the policy
+              # 6. Creates the policy for reading the static secret.
               vault policy write secret-reader-policy - <<EOF
               path "secret/data/my-app/config" {
                 capabilities = ["read"]
               }
               EOF
 
-              # 7. Create the role
+              # 7. Creates the Vault Role binding the policy to ServiceAccounts.
               vault write auth/kubernetes/role/secret-reader \
-              bound_service_account_names=default,external-secrets \
-              bound_service_account_namespaces=default,external-secrets \
-              policies=secret-reader-policy \
-              ttl=24h
+                bound_service_account_names=default,external-secrets \
+                bound_service_account_namespaces=default,external-secrets \
+                policies=secret-reader-policy \
+                ttl=24h
+
+              # 8. Enables the Database secrets engine (idempotent).
+              vault secrets enable database || echo "Database engine already enabled."
+
+              # 9. Configures the PostgreSQL connection for Pattern 3.
+              vault write database/config/my-postgresql-database \
+                plugin_name=postgresql-database-plugin \
+                allowed_roles="db-reader" \
+                connection_url={{`"postgresql://{{username}}:{{password}}@postgres-postgresql.default.svc.cluster.local:5432/postgres?sslmode=disable"`}} \
+                username="postgres" \
+                password="rootpassword"
+
+              # 10. Creates the dynamic role for generating database credentials.
+              vault write database/roles/db-reader \
+                db_name=my-postgresql-database \
+                creation_statements={{`"CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";"`}} \
+                default_ttl="1h" \
+                max_ttl="24h"
+
+              # 11. Updates the policy to include permissions for dynamic database secrets.
+              vault policy write secret-reader-policy - <<EOF
+              path "secret/data/my-app/config" {
+              capabilities = ["read"]
+              }
+              path "database/creds/db-reader" {
+              capabilities = ["read"]
+              }
+              EOF
 
               echo "--- Vault setup complete."

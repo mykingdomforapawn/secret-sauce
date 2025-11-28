@@ -1,12 +1,18 @@
 ---
+# Specifies the API version for Service resources.
 apiVersion: v1
 kind: Service
 metadata:
+  # Sets the name of the Service using the chart name.
   name: {{ .Chart.Name }}
 spec:
+  # Sets the service type to ClusterIP for internal communication.
   type: ClusterIP
   ports:
+    # Exposes port 80 within the cluster.
     - port: 80
+      # Targets the container application port 5000.
       targetPort: 5000
   selector:
+    # Selects pods with the matching app label.
     app: {{ .Chart.Name }}
